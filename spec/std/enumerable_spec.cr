@@ -234,11 +234,34 @@ describe "Enumerable" do
       array = [] of Array(Int32)
       [1, 2, 3].each_slice(2) { |slice| array << slice }
       array.should eq([[1, 2], [3]])
+      array[0].should_not be(array[1])
     end
 
     it "returns full slices" do
       array = [] of Array(Int32)
       [1, 2, 3, 4].each_slice(2) { |slice| array << slice }
+      array.should eq([[1, 2], [3, 4]])
+      array[0].should_not be(array[1])
+    end
+
+    it "reuses with true" do
+      array = [] of Array(Int32)
+      object_ids = [] of UInt64
+      [1, 2, 3, 4].each_slice(2, reuse: true) do |slice|
+        object_ids << slice.object_id
+        array << slice.dup
+      end
+      array.should eq([[1, 2], [3, 4]])
+      object_ids.uniq.size.should eq(1)
+    end
+
+    it "reuses with existing array" do
+      array = [] of Array(Int32)
+      reuse = [] of Int32
+      [1, 2, 3, 4].each_slice(2, reuse: reuse) do |slice|
+        slice.should be(reuse)
+        array << slice.dup
+      end
       array.should eq([[1, 2], [3, 4]])
     end
 
@@ -395,6 +418,27 @@ describe "Enumerable" do
       sums = [] of Int32
       [1, 2, 4, 5].in_groups_of(3, 10) { |a| sums << a.sum }
       sums.should eq([7, 25])
+    end
+
+    it "reuses with true" do
+      array = [] of Array(Int32)
+      object_ids = [] of UInt64
+      [1, 2, 4, 5].in_groups_of(3, 10, reuse: true) do |group|
+        object_ids << group.object_id
+        array << group.dup
+      end
+      array.should eq([[1, 2, 4], [5, 10, 10]])
+      object_ids.uniq.size.should eq(1)
+    end
+
+    it "reuses with existing array" do
+      array = [] of Array(Int32)
+      reuse = [] of Int32
+      [1, 2, 4, 5].in_groups_of(3, 10, reuse: reuse) do |slice|
+        slice.should be(reuse)
+        array << slice.dup
+      end
+      array.should eq([[1, 2, 4], [5, 10, 10]])
     end
   end
 

@@ -1020,16 +1020,25 @@ class Array(T)
     ary
   end
 
-  def each_combination(size : Int = self.size)
+  def each_combination(size : Int = self.size, reuse = false)
     n = self.size
     return self if size > n
     raise ArgumentError.new("size must be positive") if size < 0
+
+    if reuse
+      unless reuse.is_a?(Array)
+        reuse = typeof(self).new(size)
+      end
+    else
+      reuse = nil
+    end
 
     copy = self.dup
     pool = self.dup
 
     indices = (0...size).to_a
-    yield pool[0, size]
+
+    yield pool_slice(pool, size, reuse)
 
     while true
       stop = true
@@ -1052,14 +1061,24 @@ class Array(T)
         pool[j] = copy[indices[j]]
       end
 
-      yield pool[0, size]
+      yield pool_slice(pool, size, reuse)
     end
   end
 
-  def each_combination(size : Int = self.size)
+  private def each_combination_piece(pool, size, reuse)
+    if reuse
+      reuse.clear
+      size.times { |i| reuse << pool[i] }
+      reuse
+    else
+      pool[0, size]
+    end
+  end
+
+  def each_combination(size : Int = self.size, reuse = false)
     raise ArgumentError.new("size must be positive") if size < 0
 
-    CombinationIterator.new(self, size.to_i)
+    CombinationIterator.new(self, size.to_i, reuse)
   end
 
   # Returns a new Array that is a one-dimensional flattening of self (recursively).
@@ -2035,8 +2054,9 @@ class Array(T)
     @stop : Bool
     @i : Int32
     @first : Bool
+    @reuse : Array(T)?
 
-    def initialize(array : Array(T), @size)
+    def initialize(array : Array(T), @size, reuse)
       @n = array.size
       @copy = array.dup
       @pool = array.dup
@@ -2044,6 +2064,14 @@ class Array(T)
       @stop = @size > @n
       @i = @size - 1
       @first = true
+
+      if reuse
+        if reuse.is_a?(Array)
+          @reuse = reuse
+        else
+          @reuse = Array(T).new(@size)
+        end
+      end
     end
 
     def next
@@ -2051,7 +2079,7 @@ class Array(T)
 
       if @first
         @first = false
-        return @pool[0, @size]
+        return pool_slice(@pool, @size, @reuse)
       end
 
       while @i >= 0
@@ -2064,7 +2092,7 @@ class Array(T)
             @pool[j] = @copy[@indices[j]]
           end
 
-          value = @pool[0, @size]
+          value = pool_slice(@pool, @size, @reuse)
           @i = @size - 1
           return value
         end
@@ -2169,5 +2197,15 @@ class Array(T)
         ary
       end
     end
+  end
+end
+
+private def pool_slice(pool, size, reuse)
+  if reuse
+    reuse.clear
+    size.times { |i| reuse << pool[i] }
+    reuse
+  else
+    pool[0, size]
   end
 end

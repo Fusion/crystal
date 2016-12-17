@@ -1542,6 +1542,27 @@ describe "Array" do
       sums.should eq([9])
     end
 
+    it "does with reuse = true" do
+      sums = [] of Int32
+      object_ids = [] of UInt64
+      [1, 2, 3].each_combination(2, reuse: true) do |comb|
+        sums << comb.sum
+        object_ids << comb.object_id
+      end
+      sums.should eq([3, 4, 5])
+      object_ids.uniq.size.should eq(1)
+    end
+
+    it "does with reuse = array" do
+      sums = [] of Int32
+      reuse = [] of Int32
+      [1, 2, 3].each_combination(2, reuse: reuse) do |comb|
+        sums << comb.sum
+        comb.should be(reuse)
+      end
+      sums.should eq([3, 4, 5])
+    end
+
     assert { expect_raises(ArgumentError, "size must be positive") { [1].each_combination(-1) { } } }
 
     it "returns iterator" do
@@ -1555,6 +1576,33 @@ describe "Array" do
 
       iter.rewind
       iter.next.should eq(combs[0])
+    end
+
+    it "returns iterator with reuse = true" do
+      a = [1, 2, 3, 4]
+      combs = a.combinations(2)
+      object_ids = [] of UInt64
+      iter = a.each_combination(2, reuse: true)
+      combs.each do |comb|
+        b = iter.next
+        object_ids << b.object_id
+        b.should eq(comb)
+      end
+      iter.next.should be_a(Iterator::Stop)
+      object_ids.uniq.size.should eq(1)
+    end
+
+    it "returns iterator with reuse = array" do
+      a = [1, 2, 3, 4]
+      reuse = [] of Int32
+      combs = a.combinations(2)
+      iter = a.each_combination(2, reuse: reuse)
+      combs.each do |comb|
+        b = iter.next
+        b.should be(reuse)
+        b.should eq(comb)
+      end
+      iter.next.should be_a(Iterator::Stop)
     end
   end
 

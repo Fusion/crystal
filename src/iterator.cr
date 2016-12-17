@@ -364,8 +364,14 @@ module Iterator(T)
   #     iter.next # => [7, 8, 9]
   #     iter.next # => Iterator::Stop::INSTANCE
   #
-  def each_slice(n)
-    slice(n)
+  # By default, a new array is returned for each silce when invoking `next`.
+  # If *reuse* is given, the array can be reused: if *reuse* is
+  # an `Array`, this array will be reused; if *reuse* if truthy,
+  # the method will create a new array and reuse it. This can be
+  # used to prevent many memory allocations when each slice of
+  # interest is to be used in a read-only fashion.
+  def each_slice(n, reuse = false)
+    slice(n, reuse)
   end
 
   # TODO: with the new global type inference algorithm we can't yet express this type.
@@ -474,21 +480,45 @@ module Iterator(T)
   #     iter.next # => [3, 'z']
   #     iter.next # => Iterator::Stop::INSTANCE
   #
-  def in_groups_of(size : Int, filled_up_with = nil)
+  # By default, a new array is created and yielded for each group.
+  # If *reuse* is given, the array can be reused: if *reuse* is
+  # an `Array`, this array will be reused; if *reuse* if truthy,
+  # the method will create a new array and reuse it. This can be
+  # used to prevent many memory allocations when each slice of
+  # interest is to be used in a read-only fashion.
+  def in_groups_of(size : Int, filled_up_with = nil, reuse = false)
     raise ArgumentError.new("size must be positive") if size <= 0
-    InGroupsOf(typeof(self), T, typeof(size), typeof(filled_up_with)).new(self, size, filled_up_with)
+    InGroupsOf(typeof(self), T, typeof(size), typeof(filled_up_with)).new(self, size, filled_up_with, reuse)
   end
 
   private struct InGroupsOf(I, T, N, U)
     include Iterator(Array(T | U))
     include IteratorWrapper
 
-    def initialize(@iterator : I, @size : N, @filled_up_with : U)
+    @reuse : Array(T | U)?
+
+    def initialize(@iterator : I, @size : N, @filled_up_with : U, reuse)
+      if reuse
+        if reuse.is_a?(Array)
+          @reuse = reuse
+        else
+          @reuse = Array(T | U).new(@size)
+        end
+      else
+        @reuse = nil
+      end
     end
 
     def next
       value = wrapped_next
-      array = Array(T | U).new(@size)
+
+      if reuse = @reuse
+        reuse.clear
+        array = reuse
+      else
+        array = Array(T | U).new(@size)
+      end
+
       array << value
       (@size - 1).times do
         new_value = @iterator.next
@@ -655,29 +685,38 @@ module Iterator(T)
     end
   end
 
-  # Returns an iterator that returns slices of n elements of the initial
-  # iterator.
-  #
-  #     iter = (1..9).each.slice(3)
-  #     iter.next # => [1, 2, 3]
-  #     iter.next # => [4, 5, 6]
-  #     iter.next # => [7, 8, 9]
-  #     iter.next # => Iterator::Stop::INSTANCE
-  #
-  def slice(n : Int)
+  # Alias of `each_slice`
+  def slice(n : Int, reuse = false)
     raise ArgumentError.new "invalid slice size: #{n}" if n <= 0
-    Slice(typeof(self), T, typeof(n)).new(self, n)
+    Slice(typeof(self), T, typeof(n)).new(self, n, reuse)
   end
 
   private struct Slice(I, T, N)
     include Iterator(Array(T))
     include IteratorWrapper
 
-    def initialize(@iterator : I, @n : N)
+    @reuse : Array(T)?
+
+    def initialize(@iterator : I, @n : N, reuse)
+      if reuse
+        if reuse.is_a?(Array)
+          @reuse = reuse
+        else
+          @reuse = Array(T).new(@n)
+        end
+      else
+        @reuse = nil
+      end
     end
 
     def next
-      values = Array(T).new(@n)
+      if reuse = @reuse
+        reuse.clear
+        values = reuse
+      else
+        values = Array(T).new(@n)
+      end
+
       @n.times do
         value = @iterator.next
         break if value.is_a?(Stop)

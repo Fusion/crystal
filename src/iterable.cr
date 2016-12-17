@@ -23,9 +23,9 @@ module Iterable(T)
     each.chunk &block
   end
 
-  # Same as `each.slice(count)`.
-  def each_slice(count : Int)
-    each.slice(count)
+  # Same as `each.slice(count, reuse)`.
+  def each_slice(count : Int, reuse = false)
+    each.slice(count, reuse)
   end
 
   # Same as `each.cons(count)`.
